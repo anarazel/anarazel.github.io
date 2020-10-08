@@ -1,0 +1,375 @@
+<!DOCTYPE html>
+<html lang="en-us">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>Measuring the Memory Overhead of a Postgres Connection &middot; Postgres From Below</title>
+
+		
+  		<link rel="stylesheet" href="../../../../css/style.css">
+		<link rel="stylesheet" href="../../../../css/fonts.css">
+		<link rel="stylesheet" href="../../../../css/custom.css">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="../../../../images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="../../../../images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="../../../../images/apple-touch-icon.png">
+
+		
+		<link href="" rel="alternate" type="application/rss+xml" title="Postgres From Below" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="../../../../">
+					<h2 class="nav-title">Postgres From Below</h2>
+				</a>
+				<ul>
+    
+    
+        <li>
+            <a href="../../../../">
+                
+                <span>Home</span>
+                
+            </a>
+        </li>
+    
+        <li>
+            <a href="../../../../posts/">
+                
+                <span>Posts</span>
+                
+            </a>
+        </li>
+    
+        <li>
+            <a href="../../../../categories/">
+                
+                <span>Categories</span>
+                
+            </a>
+        </li>
+    
+        <li>
+            <a href="../../../../tags/">
+                
+                <span>Tags</span>
+                
+            </a>
+        </li>
+    
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+	<div class="post">
+		<div class="post-info">
+    <span>Written by</span>
+        Andres Freund
+        <br>
+        <span>on&nbsp;</span><time datetime="2020-10-07 19:01:02 -0700 PDT">October 7, 2020</time>
+</div>
+
+		<h1 class="post-title">Measuring the Memory Overhead of a Postgres Connection</h1>
+<div class="post-line"></div>
+
+		
+
+		<p>One fairly common complaint about postgres is that is that each connection uses
+too much memory. Often made when comparing postgres' connection model to one
+where each connection is assigned a dedicated thread, instead of the current
+model where each connection has a dedicated process.</p>
+<p>To be clear: This is a worthwhile discussion to have. And there are several
+important improvements we could make to reduce memory usage.</p>
+<p>That said, I think one common cause of these concerns is that the easy ways to
+measure the memory usage of a postgres backend, like <code>top</code> and <code>ps</code>, are quite
+misleading.</p>
+<p>It is surprisingly hard to accurately measure the increase in memory usage by
+an additional connection.</p>
+<p>In this post I&rsquo;m mostly going to talk about running Postgres on Linux, since
+that is what I have the most experience with.</p>
+<p>My bold claim is that, <strong>when measuring accurately</strong>, a <strong>connection only has
+an overhead of less than 2MiB</strong> (see <a href="#conclusion">conclusion</a>).</p>
+<h2 id="a-first-look">A first look</h2>
+<p>Just using the common operating system tools make the overhead look much bigger
+than it actually is. Especially when not utilizing
+<a href="https://www.postgresql.org/docs/current/runtime-config-resource.html#GUC-SHARED-BUFFERS">huge_pages</a>
+(not recommended), the memory usage for each process will look high.</p>
+<p>Let&rsquo;s first look at a freshly established connection, in a freshly started
+postgres cluster:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-bash" data-lang="bash">andres@awork3:~$ psql
+postgres<span style="color:#f92672">[</span>2003213<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT pg_backend_pid();</span>
+┌────────────────┐
+│ pg_backend_pid │
+├────────────────┤
+│        <span style="color:#ae81ff">2003213</span> │
+└────────────────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+andres@awork3:~/src/postgresql$ ps -q <span style="color:#ae81ff">2003213</span> -eo pid,rss
+    PID   RSS
+<span style="color:#ae81ff">2003213</span> <span style="color:#ae81ff">16944</span>
+</code></pre></div><p>About 16MiB.</p>
+<h2 id="massive-leaks-luckily-not">Massive leaks!?! Luckily not.</h2>
+<p>What&rsquo;s worse, the memory usage will appear to grow over time. To show this
+problem, I&rsquo;ll use the
+<a href="https://www.postgresql.org/docs/current/pgprewarm.html">pgprewarm</a>
+extension to load all pages in a table into postgres' buffer pool:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">postgres<span style="color:#f92672">[</span>2003213<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SHOW shared_buffers ;</span>
+┌────────────────┐
+│ shared_buffers │
+├────────────────┤
+│ 16GB           │
+└────────────────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+postgres<span style="color:#f92672">[</span>2003213<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT SUM(pg_prewarm(oid, &#39;buffer&#39;)) FROM pg_class WHERE relfilenode &lt;&gt; 0;</span>
+┌────────┐
+│  sum   │
+├────────┤
+│ <span style="color:#ae81ff">383341</span> │
+└────────┘
+
+andres@awork3:~$ ps -q <span style="color:#ae81ff">2003213</span> -eo pid,rss
+    PID   RSS
+<span style="color:#ae81ff">2003213</span> <span style="color:#ae81ff">3169144</span>
+</code></pre></div><p>Now postgres memory usage appears to be around 3GB. Even though the individual
+connection did not actually allocate much additional memory. The added memory
+usage is is proportional to the amount of shared buffers touched:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">postgres<span style="color:#f92672">[</span>2003213<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT pg_size_pretty(SUM(pg_relation_size(oid))) FROM pg_class WHERE relfilenode &lt;&gt; 0;</span>
+┌────────────────┐
+│ pg_size_pretty │
+├────────────────┤
+│ <span style="color:#ae81ff">2995</span> MB        │
+└────────────────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+</code></pre></div><p>And even worse than that, if yet another connection also uses those pages, it
+will also show as having a huge memory usage:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">postgres<span style="color:#f92672">[</span>3244960<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT sum(abalance) FROM pgbench_accounts ;</span>
+┌─────┐
+│ sum │
+├─────┤
+│   <span style="color:#ae81ff">0</span> │
+└─────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+andres@awork3:~/src/postgresql$ ps -q <span style="color:#ae81ff">3244960</span> -eo pid,rss
+    PID   RSS
+<span style="color:#ae81ff">3244960</span> <span style="color:#ae81ff">2700372</span>
+</code></pre></div><p>Of course postgres does not actually use 3+2.7 GiB of memory in this
+case. Instead, what is happening is that, with <code>huge_pages=off</code> off, ps will
+attribute the amount of shared memory, including the buffer pool, that a
+connection has utilized for each connection. Obviously leading to vastly
+over-estimating memory usage.</p>
+<h2 id="huge-pages-accidentally-kind-of-save-the-day">Huge pages accidentally kind of save the day</h2>
+<p>Many CPU micro-architectures normally use a page size of 4KiB, but also
+optionally can use larger page sizes, most commonly 2MiB.</p>
+<p>Depending on operating system, configuration, and the type of applications used
+such larger pages can be utilized transparently by the operating system, or
+explicitly by applications. See e.g.
+<a href="https://wiki.debian.org/Hugepages">Debian wiki page about huge pages</a> for some
+details.</p>
+<p>Repeating the previous experiments with <code>huge_pages=on</code> makes them look a lot
+better. First, looking at a &ldquo;new connection&rdquo;:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">andres@awork3:~$ ps -q <span style="color:#ae81ff">3245907</span> -eo pid,rss
+    PID   RSS
+<span style="color:#ae81ff">3245907</span>  <span style="color:#ae81ff">7612</span>
+</code></pre></div><p>So, a new connection now appears to use only about ~7MiB. This reduction in
+memory usage is caused by the <a href="https://en.wikipedia.org/wiki/Page_table">page table</a>
+needing less memory, as it now only needs to contain <code>1/512</code>th of the previous
+entries, due to the larger page size.</p>
+<p>And more importantly, the test where a lot of the memory is accessed:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">postgres<span style="color:#f92672">[</span>3245843<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># ;SELECT SUM(pg_prewarm(oid, &#39;buffer&#39;)) FROM pg_class WHERE relfilenode &lt;&gt; 0;</span>
+…
+postgres<span style="color:#f92672">[</span>3245851<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT sum(abalance) FROM pgbench_accounts ;</span>
+…
+
+andres@awork3:~$ ps -q 3245907,3245974 -eo pid,rss
+    PID   RSS
+<span style="color:#ae81ff">3245907</span> <span style="color:#ae81ff">12260</span>
+<span style="color:#ae81ff">3245974</span>  <span style="color:#ae81ff">8936</span>
+</code></pre></div><p>In contrast to above, these connections now appear to only use 12MiB and 9MiB
+respectively, where previously they used 3GiB and 2.7GiB. Quite the apparent
+change ;)</p>
+<p>This is due to the way the use of larger pages is implemented in Linux, not
+because we used orders of magnitude less memory: huge pages used just aren&rsquo;t
+shown as part of the <code>RSS</code> column of ps/top.</p>
+<h2 id="getting-less-unreal">Getting less unreal</h2>
+<p>Since Linux 4.5 the
+<a href="https://www.kernel.org/doc/html/latest/filesystems/proc.html?highlight=rssanon"><code>/proc/$pid/status</code></a>
+file shows the memory usage split into finer sub-categories:</p>
+<pre><code>VmRSS		size of memory portions. It contains the three following parts (VmRSS = RssAnon + RssFile + RssShmem)
+RssAnon		size of resident anonymous memory
+RssFile		size of resident file mappings
+RssShmem	size of resident shmem memory (includes SysV shm, mapping of tmpfs and shared anonymous mappings)
+</code></pre><p>Looking at these stats with <code>huge_pages=off</code>:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">andres@awork3:~$ grep -E <span style="color:#e6db74">&#39;^(Rss|HugetlbPages)&#39;</span> /proc/3247901/status
+RssAnon:	    <span style="color:#ae81ff">2476</span> kB
+RssFile:	    <span style="color:#ae81ff">5072</span> kB
+RssShmem:	    <span style="color:#ae81ff">8520</span> kB
+HugetlbPages:	       <span style="color:#ae81ff">0</span> kB
+
+postgres<span style="color:#f92672">[</span>3247901<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT SUM(pg_prewarm(oid, &#39;buffer&#39;)) FROM pg_class WHERE relfilenode &lt;&gt; 0;</span>
+
+andres@awork3:~$ ps -q <span style="color:#ae81ff">3247901</span> -eo pid,rss
+    PID   RSS
+<span style="color:#ae81ff">3247901</span> <span style="color:#ae81ff">3167164</span>
+
+andres@awork3:~$ grep -E <span style="color:#e6db74">&#39;^(Rss|HugetlbPages)&#39;</span> /proc/3247901/status
+RssAnon:	    <span style="color:#ae81ff">3148</span> kB
+RssFile:	    <span style="color:#ae81ff">9212</span> kB
+RssShmem:	 <span style="color:#ae81ff">3154804</span> kB
+HugetlbPages:	       <span style="color:#ae81ff">0</span> kB
+</code></pre></div><p><code>RssAnon</code> is the amount of &ldquo;anonymous&rdquo; memory, i.e. memory
+allocations. <code>RssFile</code> are memory mapped files, including the postgres binary
+itself. And lastly, <code>RssShmem</code> shows the accessed non-huge_pages shared
+memory.</p>
+<p>This nicely shows that most of the high memory usage ps etc show is is due to
+the shared memory accesses.</p>
+<p>And <code>huge_pages=on</code>:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">andres@awork3:~$ grep -E <span style="color:#e6db74">&#39;^(Rss|HugetlbPages)&#39;</span> /proc/3248101/status
+RssAnon:	    <span style="color:#ae81ff">2476</span> kB
+RssFile:	    <span style="color:#ae81ff">4664</span> kB
+RssShmem:	       <span style="color:#ae81ff">0</span> kB
+HugetlbPages:	  <span style="color:#ae81ff">778240</span> kB
+
+postgres<span style="color:#f92672">[</span>3248101<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT SUM(pg_prewarm(oid, &#39;buffer&#39;)) FROM pg_class WHERE relfilenode &lt;&gt; 0;</span>
+
+andres@awork3:~$ grep -E <span style="color:#e6db74">&#39;^(Rss|HugetlbPages)&#39;</span> /proc/3248101/status
+RssAnon:	    <span style="color:#ae81ff">3136</span> kB
+RssFile:	    <span style="color:#ae81ff">8756</span> kB
+RssShmem:	       <span style="color:#ae81ff">0</span> kB
+HugetlbPages:    <span style="color:#ae81ff">3846144</span> kB
+</code></pre></div><h2 id="approximating-accuracy">Approximating Accuracy</h2>
+<p>Just adding up the memory usage of the non-shmem values still over-estimates
+memory usage. There&rsquo;s two main reasons:</p>
+<p>First, it doesn&rsquo;t actually make sense to include <code>RssFile</code> when measuring a
+postgres backend&rsquo;s memory usage - for postgres that overwhelmingly just are the
+postgres binary and the shared libraries it uses (postgres does not <code>mmap()</code>
+files). As nearly all of that is shared between all processes in the system,
+it&rsquo;s not a per-connection overhead.</p>
+<p>Secondly, even just looking at <code>RssAnon</code> over-estimates memory usage.  The
+reason for that is that ps measures the entire memory of the process, even
+though the majority of a new connection&rsquo;s overhead is shared between the user
+connection and the supervisor process. This is because Linux does not copy all
+memory when <code>fork()</code>ing a new process, instead it uses
+<a href="https://en.wikipedia.org/wiki/Copy-on-write">Copy-on-write</a> to only copy pages
+when modified.</p>
+<p>There is no good way to accurately measure the memory usage of an individual
+forked process, but since version 4.14 the Linux kernel at least provides an
+approximation
+(<a href="https://git.kernel.org/pub/scm/linux/kernel/git/torvalds/linux.git/commit/?id=493b0e9d945fa9dfe96be93ae41b4ca4b6fdb317">commit with description</a>)
+in a process' <code>/proc/[pid]/smaps_rollup</code> file. <code>Pss</code> shows the &ldquo;the process’
+proportional share of this mapping&rdquo; across all of a process' mappings (Search
+linux&rsquo;s documentation page for
+<a href="https://www.kernel.org/doc/html/latest/filesystems/proc.html?highlight=smaps_rollup">smaps_rollup</a>
+and
+<a href="https://www.kernel.org/doc/html/latest/filesystems/proc.html?highlight=Pss">Pss</a>,
+which unfortunately does not have direct links). For memory shared between
+processes it will divide the memory usage by the number of processes using a
+mapping.</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">
+postgres<span style="color:#f92672">[</span>2004042<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT SUM(pg_prewarm(oid, &#39;buffer&#39;)) FROM pg_class WHERE relfilenode &lt;&gt; 0;</span>
+┌────────┐
+│  sum   │
+├────────┤
+│ <span style="color:#ae81ff">383341</span> │
+└────────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+postgres<span style="color:#f92672">[</span>2004042<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SHOW huge_pages ;</span>
+┌────────────┐
+│ huge_pages │
+├────────────┤
+│ off        │
+└────────────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+andres@awork3:~$ grep ^Pss /proc/2004042/smaps_rollup
+Pss:             <span style="color:#ae81ff">3113967</span> kB
+Pss_Anon:           <span style="color:#ae81ff">2153</span> kB
+Pss_File:           <span style="color:#ae81ff">3128</span> kB
+Pss_Shmem:       <span style="color:#ae81ff">3108684</span> kB
+</code></pre></div><p><code>Pss_Anon</code> contains memory allocated by the process, <code>Pss_File</code> includes shared
+libraries etc linked into the process, and <code>Pss_Shmem</code> (if not using
+<code>huge_pages</code>) the shared memory usage divided across all the processes having
+touched the corresponding pages.</p>
+<p>What makes the <em>proportional</em> values not <em>perfect</em> is that the divisor depends
+on the number of connections to the server. Here I use pgbench (scale 1000, -S,
+-M prepared -c 1024) to start a large number of connections:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">postgres<span style="color:#f92672">[</span>2004042<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT count(*) FROM pg_stat_activity ;</span>
+┌───────┐
+│ count │
+├───────┤
+│  <span style="color:#ae81ff">1030</span> │
+└───────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+postgres<span style="color:#f92672">[</span>2004042<span style="color:#f92672">][</span>1<span style="color:#f92672">]=</span><span style="color:#75715e"># SELECT pid FROM pg_stat_activity WHERE application_name = &#39;pgbench&#39; ORDER BY random() LIMIT 1;</span>
+┌─────────┐
+│   pid   │
+├─────────┤
+│ <span style="color:#ae81ff">3249913</span> │
+└─────────┘
+<span style="color:#f92672">(</span><span style="color:#ae81ff">1</span> row<span style="color:#f92672">)</span>
+
+andres@awork3:~$ grep ^Pss /proc/3249913/smaps_rollup
+Pss:                <span style="color:#ae81ff">4055</span> kB
+Pss_Anon:           <span style="color:#ae81ff">1185</span> kB
+Pss_File:              <span style="color:#ae81ff">6</span> kB
+Pss_Shmem:          <span style="color:#ae81ff">2863</span> kB
+</code></pre></div><p>And with <code>huge_pages=on</code>:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">andres@awork3:~$ grep ^Pss /proc/2007379/smaps_rollup
+Pss:                <span style="color:#ae81ff">1179</span> kB
+Pss_Anon:           <span style="color:#ae81ff">1173</span> kB
+Pss_File:              <span style="color:#ae81ff">6</span> kB
+Pss_Shmem:             <span style="color:#ae81ff">0</span> kB
+</code></pre></div><p>The <code>Pss</code> values unfortunately do not account for resources only not visible to
+the application. E.g. the size of the page table is not included. The page
+table size is also visible in the aforementioned
+<a href="https://www.kernel.org/doc/html/latest/filesystems/proc.html?highlight=VmPTE"><code>/proc/$pid/status</code></a>
+file.</p>
+<p>To my knowledge - but I am not certain - <code>VmPTE</code> (the page table size) is
+completely private for each process, but most other <code>Vm*</code> values, including the
+stack <code>VmStk</code> are shared in a copy-on-write manner.</p>
+<p>Using the above, the overhead due to the page table is, with <code>huge_pages=off</code>:</p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">andres@awork3:~$ grep ^VmPTE /proc/2004042/status
+VmPTE:      <span style="color:#ae81ff">6480</span> kB
+</code></pre></div><p>and with <code>huge_pages=on</code></p>
+<div class="highlight"><pre style="color:#f8f8f2;background-color:#272822;-moz-tab-size:4;-o-tab-size:4;tab-size:4"><code class="language-shell" data-lang="shell">VmPTE:	     <span style="color:#ae81ff">132</span> kB
+</code></pre></div><p>Of course there are some additional small overheads in the kernel for each
+process, but they are small enough not be worth being represented in the
+<code>status</code> file.</p>
+<h2 id="conclusion">Conclusion</h2>
+<p>Based on the measurements above we can approximate that a connection running a
+very simplistic read-only OLTP workload has an overhead of about <strong>7.6MiB</strong>
+with <code>huge_pages=off</code> and of <strong>1.3MiB</strong> <code>huge_pages=on</code> by adding <code>Pss_Anon</code> to
+<code>VmPTE</code>.</p>
+<p>Even when leaving room for some &ldquo;invisible&rdquo; overhead, a larger amount of data
+in Postgres' buffer pool, etc, I think this backs my earlier claim that the
+overhead of a connection is less than 2MiB.</p>
+
+
+		
+	</div>
+
+	<div class="pagination">
+
+		<a href="#" class="top">Top</a>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2020-10-07 21:57:07.979026255 -0700 PDT m=&#43;0.129192419">2020</time> Andres Freund. Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>

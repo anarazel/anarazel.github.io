@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en-us">
+    <head>
+		<meta charset="UTF-8">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+		<title>memory usage &middot; Postgres From Below</title>
+
+		
+  		<link rel="stylesheet" href="../../css/style.css">
+		<link rel="stylesheet" href="../../css/fonts.css">
+		<link rel="stylesheet" href="../../css/custom.css">
+		
+		<link rel="icon" type="image/png" sizes="32x32" href="../../images/favicon-32x32.png">
+		<link rel="icon" type="image/png" sizes="16x16" href="../../images/favicon-16x16.png">
+		<link rel="apple-touch-icon" sizes="180x180" href="../../images/apple-touch-icon.png">
+
+		
+		<link href="../../tags/memory-usage/index.xml" rel="alternate" type="application/rss+xml" title="Postgres From Below" />
+	</head>
+
+    <body>
+        		<nav class="nav">
+			<div class="nav-container">
+				<a href="../../">
+					<h2 class="nav-title">Postgres From Below</h2>
+				</a>
+				<ul>
+    
+    
+        <li>
+            <a href="../../">
+                
+                <span>Home</span>
+                
+            </a>
+        </li>
+    
+        <li>
+            <a href="../../posts/">
+                
+                <span>Posts</span>
+                
+            </a>
+        </li>
+    
+        <li>
+            <a href="../../categories/">
+                
+                <span>Categories</span>
+                
+            </a>
+        </li>
+    
+        <li>
+            <a href="../../tags/">
+                
+                <span>Tags</span>
+                
+            </a>
+        </li>
+    
+</ul>
+			</div>
+		</nav>
+
+        
+
+<main>
+    <h1>Tag memory usage</h1>
+	<div class="catalogue">
+		
+			<a href="../../2020/10/07/measuring-the-memory-overhead-of-a-postgres-connection/" class="catalogue-item">
+    <div>
+        <time datetime="2020-10-07 19:01:02 -0700 PDT" class="catalogue-time">October 7, 2020</time>
+        <h1 class="catalogue-title">Measuring the Memory Overhead of a Postgres Connection</h1>
+        <div class="catalogue-line"></div>
+
+        <p>
+            One fairly common complaint about postgres is that is that each connection uses too much memory. Often made when comparing postgres' connection model to one where each connection is assigned a dedicated thread, instead of the current model where each connection has a dedicated process.
+To be clear: This is a worthwhile discussion to have. And there are several important improvements we could make to reduce memory usage.
+That said, I think one common cause of these concerns is that the easy ways to measure the memory usage of a postgres backend, like top and ps, are quite misleading.
+        </p>
+    </div>
+</a>
+
+		
+	</div>
+	
+	<div class="pagination">
+		
+		
+	
+		<span>1</span>
+	</div>
+</main>
+
+
+        		<footer>
+			<span>
+			&copy; <time datetime="2020-10-07 21:57:07.984230796 -0700 PDT m=&#43;0.134396997">2020</time> Andres Freund. Made with <a href='https://gohugo.io'>Hugo</a> using the <a href='https://github.com/EmielH/tale-hugo/'>Tale</a> theme.
+			</span>
+		</footer>
+
+    </body>
+</html>

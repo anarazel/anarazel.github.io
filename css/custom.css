@@ -1,0 +1,17 @@
+/* display markdown tables in an easier to read manner */
+/* PLEASE, somebody rescue the world from my bad colors */
+.post thead tr { background: #CCC; }
+.post thead th { border-bottom: 4px solid #999; padding-left: 5px; padding-right: 5px;}
+
+.post tbody tr:nth-child(even) { background: #DDD; }
+.post tbody tr:nth-child(odd) { background: #FFF; }
+
+.post tbody tr:hover {background: #aaaaff }
+.post tbody td { font-family: monospace; }
+
+.post > table { padding-top: 10px; padding-bottom: 10px; }
+
+/* avoid ugly spacing between lines in code blocks */
+code, .highlight > pre { line-height: 1 }
+
+.post figure p { text-align: center; padding-bottom: 1em;}
