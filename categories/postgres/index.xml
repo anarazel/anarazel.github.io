@@ -2,18 +2,18 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>postgres on Postgres From Below</title>
-    <link>/categories/postgres/</link>
+    <link>https://blog.anarazel.de/categories/postgres/</link>
     <description>Recent content in postgres on Postgres From Below</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>Andres Freund</copyright>
-    <lastBuildDate>Wed, 07 Oct 2020 19:01:02 -0700</lastBuildDate><atom:link href="/categories/postgres/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 07 Oct 2020 19:01:02 -0700</lastBuildDate><atom:link href="https://blog.anarazel.de/categories/postgres/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>Measuring the Memory Overhead of a Postgres Connection</title>
-      <link>/2020/10/07/measuring-the-memory-overhead-of-a-postgres-connection/</link>
+      <link>https://blog.anarazel.de/2020/10/07/measuring-the-memory-overhead-of-a-postgres-connection/</link>
       <pubDate>Wed, 07 Oct 2020 19:01:02 -0700</pubDate>
       
-      <guid>/2020/10/07/measuring-the-memory-overhead-of-a-postgres-connection/</guid>
+      <guid>https://blog.anarazel.de/2020/10/07/measuring-the-memory-overhead-of-a-postgres-connection/</guid>
       <description>One fairly common complaint about postgres is that is that each connection uses too much memory. Often made when comparing postgres&#39; connection model to one where each connection is assigned a dedicated thread, instead of the current model where each connection has a dedicated process.
 To be clear: This is a worthwhile discussion to have. And there are several important improvements we could make to reduce memory usage.
 That said, I think one common cause of these concerns is that the easy ways to measure the memory usage of a postgres backend, like top and ps, are quite misleading.</description>

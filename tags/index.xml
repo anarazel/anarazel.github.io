@@ -2,27 +2,27 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Tags on Postgres From Below</title>
-    <link>/tags/</link>
+    <link>https://blog.anarazel.de/tags/</link>
     <description>Recent content in Tags on Postgres From Below</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>Andres Freund</copyright>
-    <lastBuildDate>Wed, 07 Oct 2020 19:01:02 -0700</lastBuildDate><atom:link href="/tags/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 07 Oct 2020 19:01:02 -0700</lastBuildDate><atom:link href="https://blog.anarazel.de/tags/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>linux</title>
-      <link>/tags/linux/</link>
+      <link>https://blog.anarazel.de/tags/linux/</link>
       <pubDate>Wed, 07 Oct 2020 19:01:02 -0700</pubDate>
       
-      <guid>/tags/linux/</guid>
+      <guid>https://blog.anarazel.de/tags/linux/</guid>
       <description></description>
     </item>
     
     <item>
       <title>memory usage</title>
-      <link>/tags/memory-usage/</link>
+      <link>https://blog.anarazel.de/tags/memory-usage/</link>
       <pubDate>Wed, 07 Oct 2020 19:01:02 -0700</pubDate>
       
-      <guid>/tags/memory-usage/</guid>
+      <guid>https://blog.anarazel.de/tags/memory-usage/</guid>
       <description></description>
     </item>
     

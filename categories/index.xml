@@ -2,27 +2,27 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Categories on Postgres From Below</title>
-    <link>/categories/</link>
+    <link>https://blog.anarazel.de/categories/</link>
     <description>Recent content in Categories on Postgres From Below</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en-us</language>
     <copyright>Andres Freund</copyright>
-    <lastBuildDate>Wed, 07 Oct 2020 19:01:02 -0700</lastBuildDate><atom:link href="/categories/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 07 Oct 2020 19:01:02 -0700</lastBuildDate><atom:link href="https://blog.anarazel.de/categories/index.xml" rel="self" type="application/rss+xml" />
     <item>
       <title>planetpostgres</title>
-      <link>/categories/planetpostgres/</link>
+      <link>https://blog.anarazel.de/categories/planetpostgres/</link>
       <pubDate>Wed, 07 Oct 2020 19:01:02 -0700</pubDate>
       
-      <guid>/categories/planetpostgres/</guid>
+      <guid>https://blog.anarazel.de/categories/planetpostgres/</guid>
       <description></description>
     </item>
     
     <item>
       <title>postgres</title>
-      <link>/categories/postgres/</link>
+      <link>https://blog.anarazel.de/categories/postgres/</link>
       <pubDate>Wed, 07 Oct 2020 19:01:02 -0700</pubDate>
       
-      <guid>/categories/postgres/</guid>
+      <guid>https://blog.anarazel.de/categories/postgres/</guid>
       <description></description>
     </item>
     
